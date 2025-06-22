@@ -1,22 +1,24 @@
-﻿using System;
+﻿using HarmonyLib;
+using RimWorld;
+using RimWorld.QuestGen;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
-using System.Text;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Globalization;
+using System.Text;
 using UnityEngine;
 using UnityEngine.Bindings;
 using UnityEngine.Scripting;
-using RimWorld;
-using RimWorld.QuestGen;
 using Verse;
 using Verse.AI;
 using Verse.Grammar;
 using Verse.Sound;
-using HarmonyLib;
+using static UnityEngine.GraphicsBuffer;
+using static UnityEngine.Scripting.GarbageCollector;
 
 namespace MIM40kFactions.Anomaly
 {
@@ -32,10 +34,11 @@ namespace MIM40kFactions.Anomaly
             //EMWH_MutantWeaponPatch
             harmony.Patch(AccessTools.Method(typeof(MutantUtility), "SetFreshPawnAsMutant", new System.Type[2] { typeof(Pawn), typeof(MutantDef) }), prefix: new HarmonyMethod(typeof(EMWH_MutantWeaponPatch).GetMethod("SetFreshPawnAsMutantPrefix")));
             harmony.Patch(AccessTools.Method(typeof(Pawn_MutantTracker), "HandleEquipment"), prefix: new HarmonyMethod(typeof(EMWH_MutantWeaponPatch).GetMethod("HandleEquipmentPrefix")));
-            harmony.Patch(AccessTools.Method(typeof(Game), "FinalizeInit"), postfix: new HarmonyMethod(typeof(EMWH_UnlockForNecronsPatch).GetMethod("FinalizeInit_Postfix")));
+            harmony.Patch(AccessTools.Method(typeof(EntityCodex), "Hidden", new System.Type[1] { typeof(ResearchProjectDef)}), postfix: new HarmonyMethod(typeof(EMWH_UnlockForNecronsPatch).GetMethod("HiddenPostfix")));
         }
     }
 
+    [StaticConstructorOnStartup]
     public static class EMWH_ResearchTabPatch
     {
         [HarmonyPostfix]
@@ -241,26 +244,43 @@ namespace MIM40kFactions.Anomaly
             }
         }
     }
+
     public static class EMWH_UnlockForNecronsPatch
     {
-        public static void FinalizeInit_Postfix()
+        private static readonly Dictionary<string, bool> HiddenCache = new Dictionary<string, bool>();
+
+        [HarmonyPostfix]
+        public static void HiddenPostfix(ResearchProjectDef def, ref bool __result)
         {
-            // Replace "Necron" with your actual faction defName
-            if (Faction.OfPlayer.def.defName != "EMNC_Szarekhan" && Faction.OfPlayer.def.defName != "EMNC_Sautekh")
+            if (def == null)
                 return;
 
-            foreach (var codex in DefDatabase<EntityCodexEntryDef>.AllDefs)
+            // Check cache
+            if (HiddenCache.TryGetValue(def.defName, out bool cachedResult))
             {
-                // Check if any discoveredResearchProjects has a defName starting with "EMNC_Necron_"
-                if (codex.discoveredResearchProjects != null &&
-                    codex.discoveredResearchProjects.Any(rp => rp.defName != null && rp.defName.StartsWith("EMNC_Necron_")))
-                {
-                    if (!codex.Discovered)
-                    {
-                        Find.EntityCodex.Discovered(codex);
-                    }
-                }
+                __result = cachedResult;
+                return;
             }
+
+            if (Faction.OfPlayer.def.defName != "EMNC_SA_PlayerColony" && Faction.OfPlayer.def.defName != "EMNC_SZ_PlayerColony")
+            {
+                Log.Warning($"[MIM Debug] Player Faction is not a Necron Faction");
+                return;
+            }
+
+            if (def.knowledgeCategory == null || (def.knowledgeCategory.defName != "EMNC_Basic" && def.knowledgeCategory.defName != "EMNC_Advanced"))
+                return;
+
+            if (!__result)
+                return;
+
+            var modExtension = def.GetModExtension<NecronResearchExtension>();
+
+            if (modExtension == null)
+                return;
+            
+            __result = false; // Unlock the research project for Necrons
+            HiddenCache[def.defName] = __result; // Cache the result
         }
     }
 }

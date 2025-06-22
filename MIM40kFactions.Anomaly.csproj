@@ -69,6 +69,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="NecronResearchExtension.cs" />
     <Compile Include="PsychicRitualToil_SummonNecronPlayer.cs" />
     <Compile Include="PsychicRitualDef_SummonNecronPlayer.cs" />
     <Compile Include="MutantDefExtension.cs" />
