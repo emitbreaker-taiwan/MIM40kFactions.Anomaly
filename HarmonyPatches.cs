@@ -28,13 +28,14 @@ namespace MIM40kFactions.Anomaly
         {
             Harmony harmony = new Harmony("rimworld.emitbreaker.MIM.WH40k.Anomaly");
             //EMWH_ResearchTabPatch
-            harmony.Patch(AccessTools.Method(typeof(MainTabWindow_Research), "DrawProjectInfo", new System.Type[1]{typeof (Rect)}), postfix: new HarmonyMethod(typeof(EMWH_ResearchTabPatch).GetMethod("DrawProjectInfoNecronPostfix")));
+            harmony.Patch(AccessTools.Method(typeof(MainTabWindow_Research), "DrawProjectInfo", new System.Type[1] { typeof(Rect) }), postfix: new HarmonyMethod(typeof(EMWH_ResearchTabPatch).GetMethod("DrawProjectInfoNecronPostfix")));
             //EMWH_MutantWeaponPatch
             harmony.Patch(AccessTools.Method(typeof(MutantUtility), "SetFreshPawnAsMutant", new System.Type[2] { typeof(Pawn), typeof(MutantDef) }), prefix: new HarmonyMethod(typeof(EMWH_MutantWeaponPatch).GetMethod("SetFreshPawnAsMutantPrefix")));
             harmony.Patch(AccessTools.Method(typeof(Pawn_MutantTracker), "HandleEquipment"), prefix: new HarmonyMethod(typeof(EMWH_MutantWeaponPatch).GetMethod("HandleEquipmentPrefix")));
+            harmony.Patch(AccessTools.Method(typeof(Game), "FinalizeInit"), postfix: new HarmonyMethod(typeof(EMWH_UnlockForNecronsPatch).GetMethod("FinalizeInit_Postfix")));
         }
     }
-    
+
     public static class EMWH_ResearchTabPatch
     {
         [HarmonyPostfix]
@@ -159,7 +160,7 @@ namespace MIM40kFactions.Anomaly
         {
             if (!pawn.RaceProps.Humanlike)
                 return true;
-            
+
             MutantDefExtension modExtension = mutant.GetModExtension<MutantDefExtension>();
             if (modExtension == null)
                 return true;
@@ -196,14 +197,28 @@ namespace MIM40kFactions.Anomaly
 
             return false;
         }
-        private static void HandleEquipmentAlternative (Pawn pawn, MutantDef def)
+        private static void HandleEquipmentAlternative(Pawn pawn, MutantDef def)
         {
             if (pawn.apparel == null)
             {
                 return;
             }
 
-            if (!def.canWearApparel)
+            // For 1.5
+            //if (!def.canWearApparel)
+            //{
+            //    if (pawn.MapHeld != null)
+            //    {
+            //        pawn.apparel.DropAll(pawn.Position);
+            //    }
+            //    else
+            //    {
+            //        pawn.apparel.DestroyAll();
+            //    }
+            //}
+
+            // For 1.6
+            if (def.disableApparel)
             {
                 if (pawn.MapHeld != null)
                 {
@@ -223,6 +238,28 @@ namespace MIM40kFactions.Anomaly
             foreach (Apparel item in pawn.apparel.WornApparel)
             {
                 item.WornByCorpse = true;
+            }
+        }
+    }
+    public static class EMWH_UnlockForNecronsPatch
+    {
+        public static void FinalizeInit_Postfix()
+        {
+            // Replace "Necron" with your actual faction defName
+            if (Faction.OfPlayer.def.defName != "EMNC_Szarekhan" && Faction.OfPlayer.def.defName != "EMNC_Sautekh")
+                return;
+
+            foreach (var codex in DefDatabase<EntityCodexEntryDef>.AllDefs)
+            {
+                // Check if any discoveredResearchProjects has a defName starting with "EMNC_Necron_"
+                if (codex.discoveredResearchProjects != null &&
+                    codex.discoveredResearchProjects.Any(rp => rp.defName != null && rp.defName.StartsWith("EMNC_Necron_")))
+                {
+                    if (!codex.Discovered)
+                    {
+                        Find.EntityCodex.Discovered(codex);
+                    }
+                }
             }
         }
     }
